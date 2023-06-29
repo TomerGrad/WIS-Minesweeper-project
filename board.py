@@ -4,9 +4,12 @@ from tkinter import ttk
 
 class Board(ttk.Frame):
     """
-    The game
+    The Board class define a single game board with specific number of rows, columns & mines. Each board has 2
+    initializations: First the GUI initialization, in which the board parameters assigned and a grid of cells (defined
+    as ttk.Labels) are formed and placed. Second initialization happened after the first click of a user on any cell,
+    which set the mines location, binds all cells to the user actions.
     """
-
+    # define the labels colors for neighboring hint
     COLORS = (None, 'blue', 'green', 'red', 'purple', 'brown', 'cyan', 'black', 'gray')
 
     def __init__(self, rows: int, columns: int, n_mines: int, master: tk.Tk = None):
@@ -19,7 +22,7 @@ class Board(ttk.Frame):
 
         for row in range(rows):
             for column in range(columns):
-                cell = ttk.Label(self, width=3, relief='raise', anchor='center')
+                cell = ttk.Label(self, width=3, relief='raise', anchor='center', padding=2)
                 cell.grid(row=row, column=column)
                 cell.bind('<Button-1>', lambda event: self.start(event.widget))
                 self.cells.append(cell)
@@ -40,16 +43,10 @@ class Board(ttk.Frame):
 
     def neighbors_loc(self, loc: tuple[int, int]) -> set:
         """
-        Helper methods that get a position of a cell on the board, and return a set of the surrounding cells, disclusive
-        the initial position
+        Helper methods that get a position of a cell on the board, and return a set of the surrounding cells, not
+        included the initial position
 
-        Examples
-        -------
-        >>>board = Board(9, 9 ,10)
-        >>>board.neighbors_loc((3, 3))
-        {(2, 2), (2, 3), (2, 4), (3, 2), (3, 4), (4, 2), (4, 3), (4, 4)}
-        >>> board.neighbors_loc((0, 0))
-        {(0, 1), (1, 0), (1, 1)}
+        :return: set of neighbors positions.
         """
         neighbors = set()
         for i in range(-1, 2):
@@ -61,25 +58,39 @@ class Board(ttk.Frame):
         return neighbors
 
     def flag(self, cell: ttk.Label) -> None:
+        """
+        Flag or de-flag cell. Flagged cell cannot be opened without de-flag it first. Flagging are bind only to closed
+        cells.
+        """
         if str(cell.cget('relief')) == 'raise':
             if not cell.instate(['disabled']):
                 cell.configure(state='disabled', text='¶', foreground='red')
                 self.master.flags.set(self.master.flags.get() + 1)
             else:
-                cell.configure(state='normal', text='')
+                cell.configure(state='classic', text='')
                 self.master.flags.set(self.master.flags.get() - 1)
 
-    def lose(self):
+    def lose(self) -> None:
+        """
+        End the game with a lose & uncover the hidden mines.
+        """
         for mine_loc in self.mines_locs:
             self.loc2cell(mine_loc).configure(text='*', foreground='black')
+        self.master.over()
 
     def win(self) -> bool:
+        """
+        check if the game over with a win, and return the outcome
+        """
         for cell in filter(lambda w: str(w.cget('relief')) == 'raise', self.cells):
             if self.cell2loc(cell) not in self.mines_locs:
                 return False
         return True
 
     def start(self, cell_0: ttk.Label) -> None:
+        """
+        Initialize the mine locations and the user actions, start the game clock and open the first cell
+        """
         loc = self.cell2loc(cell_0)
         while len(self.mines_locs) < self.n_mines:
             row = randrange(self.rows)
@@ -97,17 +108,25 @@ class Board(ttk.Frame):
         self.onclick(cell_0)
 
     def onclick(self, cell: ttk.Label):
+        """
+        Main action of user. By clicking a cell, the game will be end in a lose/win, or be continued. If the game isn't
+        over, the cell will exhibit the number of mines that surrounding it. If no mines surround this cell, the game
+        will open recursively all the closed neighbors of this cell.
+        """
+        # work only closed cell
         if not cell.instate(['disabled']):
             cell.configure(relief='flat', state='disabled')
 
             loc = self.cell2loc(cell)
+            # a lose
             if loc in self.mines_locs:
                 self.lose()
-                self.master.over()
             else:
                 neighbors = self.neighbors_loc(loc)
+                # number of neighboring mines
                 mines_neighbors = len(neighbors.intersection(self.mines_locs))
                 cell.configure(text=mines_neighbors if mines_neighbors else '', foreground=self.COLORS[mines_neighbors])
+                # open the neighbor cells recursively
                 if mines_neighbors == 0:
                     for neighbor in neighbors:
                         try:
@@ -117,6 +136,6 @@ class Board(ttk.Frame):
                             self.onclick(self.loc2cell(neighbor))
                         except tk.TclError:
                             return
-
+            # a win
             if self.win():
                 self.master.over()
